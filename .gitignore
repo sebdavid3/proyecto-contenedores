@@ -1,0 +1,44 @@
+# Dependencias de Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Variables de entorno
+.env
+.env.local
+.env.*.local
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+
+# Docker
+.docker/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Ejemplos y archivos temporales
+ejemplo/
+EJEMPLOS_ROBLE-main/
+*.zip
+
+# Scripts de prueba y tokens
+get-token.js
+test-roble-db.js
+roble-token.txt
+
+# Archivos temporales del gestor
+gestor-microservicios/temp/
+gestor-microservicios/data/
