@@ -21,7 +21,43 @@ Roble/
 └── docker-compose.yml          # Orquestación del gestor
 ```
 
-## Inicio Rápido
+
+## Cómo compartir y ejecutar este proyecto en cualquier PC
+
+1. **Requisitos previos:**
+   - Tener instalado [Docker Desktop](https://www.docker.com/products/docker-desktop/) y Docker Compose.
+
+2. **Clona este repositorio:**
+   ```bash
+   git clone <url-del-repo>
+   cd <carpeta-del-repo>
+   ```
+
+3. **Crea la red Docker (solo la primera vez):**
+   ```bash
+   docker network create microservices-network
+   ```
+   > Si la red ya existe, este comando no hace nada.
+
+4. **Levanta el gestor:**
+   ```bash
+   docker-compose up --build
+   ```
+
+5. **Abre el dashboard:**
+   [http://localhost:4000](http://localhost:4000)
+
+6. **Crea y accede a microservicios:**
+   - Todos los microservicios solo son accesibles a través del proxy del gestor.
+   - Ejemplo de acceso:
+     ```
+     http://localhost:4000/services/{nombre-del-servicio}/api/hello
+     ```
+   - **Nunca se expone el puerto 3000 al host.**
+
+---
+
+## Inicio Rápido (resumen)
 
 1. **Levantar el gestor:**
    ```bash
@@ -29,9 +65,7 @@ Roble/
    ```
 
 2. **Abrir el dashboard:**
-   ```
-   http://localhost:4000
-   ```
+   [http://localhost:4000](http://localhost:4000)
 
 3. **Crear un microservicio:**
    - Pega tu código Node.js

@@ -236,7 +236,7 @@ CMD ["npm", "start"]
       ExposedPorts: { '3000/tcp': {} },
       HostConfig: {
         // NO exponemos puertos externos - solo red interna Docker
-        NetworkMode: 'roble_microservices-network',
+        NetworkMode: 'microservices-network',
         RestartPolicy: { Name: 'unless-stopped' }
       },
       Env: [
