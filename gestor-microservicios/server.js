@@ -6,6 +6,18 @@ const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
 const path = require('path');
 const { createProxyMiddleware } = require('http-proxy-middleware');
+require('dotenv').config();
+
+// Import ROBLE authentication module
+const {
+  robleLogin,
+  robleVerifyToken,
+  robleGetUserInfo,
+  robleCheckPermissions,
+  robleQueryTable,
+  robleAuthMiddleware,
+  roblePermissionMiddleware
+} = require('./roble-auth');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -31,7 +43,7 @@ function loadData() {
     if (fs.existsSync(DATA_FILE)) {
       const data = fs.readFileSync(DATA_FILE, 'utf8');
       microservices = JSON.parse(data);
-      console.log(`✅ Cargados ${microservices.length} microservicios desde archivo`);
+      console.log(`Cargados ${microservices.length} microservicios desde archivo`);
       
       // Restaurar proxies para microservicios activos
       microservices.forEach(ms => {
@@ -74,16 +86,28 @@ function registerProxy(serviceName, containerName) {
     pathRewrite: {
       [`^/services/${serviceName}`]: '', // Reescribir la ruta removiendo el prefijo
     },
-    onError: (err, req, res) => {
-      console.error(`❌ Error en proxy para ${serviceName}:`, err.message);
-      res.status(503).json({
-        success: false,
-        error: 'Servicio no disponible',
-        service: serviceName
-      });
-    },
+    // FIX: Parse body before proxying
     onProxyReq: (proxyReq, req, res) => {
-      console.log(`🔀 Proxy: ${req.method} ${req.url} → ${containerName}:3000${req.url.replace(proxyPath, '')}`);
+      console.log(`Proxy: ${req.method} ${req.url} → ${containerName}:3000${req.url.replace(proxyPath, '')}`);
+      
+      // Si hay un body, reenviarlo correctamente
+      if (req.body && Object.keys(req.body).length > 0) {
+        const bodyData = JSON.stringify(req.body);
+        proxyReq.setHeader('Content-Type', 'application/json');
+        proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
+        proxyReq.write(bodyData);
+      }
+    },
+    onError: (err, req, res) => {
+      console.error(`Error en proxy para ${serviceName}:`, err.message);
+      if (!res.headersSent) {
+        res.status(503).json({
+          success: false,
+          error: 'Servicio no disponible',
+          service: serviceName,
+          details: err.message
+        });
+      }
     }
   });
   
@@ -91,7 +115,7 @@ function registerProxy(serviceName, containerName) {
   app.use(proxyPath, proxyMiddleware);
   activeProxies.set(serviceName, proxyMiddleware);
   
-  console.log(`✅ Proxy registrado: ${proxyPath} → ${containerName}:3000`);
+  console.log(`Proxy registrado: ${proxyPath} → ${containerName}:3000`);
 }
 
 // Desregistrar proxy de un microservicio
@@ -100,9 +124,145 @@ function unregisterProxy(serviceName) {
     // Express no permite eliminar middleware dinámicamente de forma fácil
     // Pero podemos marcarlo como inactivo y manejarlo en el proxy
     activeProxies.delete(serviceName);
-    console.log(`🗑️ Proxy desregistrado: /services/${serviceName}`);
+    console.log(`Proxy desregistrado: /services/${serviceName}`);
   }
 }
+
+// ==================== ROBLE AUTHENTICATION ENDPOINTS ====================
+
+// Login endpoint
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  
+  if (!email || !password) {
+    return res.status(400).json({
+      success: false,
+      error: 'Email and password are required'
+    });
+  }
+  
+  try {
+    const result = await robleLogin(email, password);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Login successful',
+        ...result.data
+      });
+    } else {
+      res.status(401).json({
+        success: false,
+        error: result.error || 'Login failed'
+      });
+    }
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error during login'
+    });
+  }
+});
+
+// Verify token endpoint
+app.get('/api/auth/verify', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({
+      success: false,
+      error: 'Authentication required',
+      message: 'Please provide a valid token'
+    });
+  }
+  
+  const token = authHeader.split(' ')[1];
+  
+  try {
+    const userInfo = await robleGetUserInfo(token);
+    
+    if (userInfo.success) {
+      res.json({
+        success: true,
+        valid: true,
+        user: userInfo.data
+      });
+    } else {
+      res.status(401).json({
+        success: false,
+        valid: false,
+        error: userInfo.error || 'Invalid token'
+      });
+    }
+  } catch (error) {
+    console.error('Token verification error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error during token verification'
+    });
+  }
+});
+
+// Get user info endpoint
+app.get('/api/auth/me', robleAuthMiddleware, async (req, res) => {
+  try {
+    const userInfo = await robleGetUserInfo(req.robleToken);
+    
+    if (userInfo.success) {
+      res.json({
+        success: true,
+        user: userInfo.data
+      });
+    } else {
+      res.status(401).json({
+        success: false,
+        error: userInfo.error || 'Failed to get user info'
+      });
+    }
+  } catch (error) {
+    console.error('Get user info error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+});
+
+// ROBLE database query endpoint (protected)
+app.post('/api/roble/query', robleAuthMiddleware, async (req, res) => {
+  const { tableName, filters } = req.body;
+  
+  if (!tableName) {
+    return res.status(400).json({
+      success: false,
+      error: 'Table name is required'
+    });
+  }
+  
+  try {
+    const result = await robleQueryTable(req.robleToken, tableName, filters || {});
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        data: result.data,
+        tableName
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        error: result.error || 'Query failed'
+      });
+    }
+  } catch (error) {
+    console.error('ROBLE query error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error during query'
+    });
+  }
+});
 
 // ==================== ENDPOINTS API ====================
 
@@ -148,8 +308,8 @@ app.get('/api/microservices/:id', (req, res) => {
   res.json({ success: true, microservice });
 });
 
-// Crear un nuevo microservicio
-app.post('/api/microservices', async (req, res) => {
+// Crear un nuevo microservicio (PROTECTED - requires ROBLE authentication and admin permissions)
+app.post('/api/microservices', roblePermissionMiddleware('create'), async (req, res) => {
   const { name, code, dependencies, baseImage, description, env } = req.body;
   
   if (!name || !code || !dependencies || !Array.isArray(dependencies)) {
@@ -163,6 +323,11 @@ app.post('/api/microservices', async (req, res) => {
     const id = uuidv4();
     const serviceName = `${name.toLowerCase().replace(/\s+/g, '-')}-${id.substring(0, 8)}`;
     const containerName = `ms-${serviceName}`;
+    
+    // Add creator information
+    const creator = req.robleUser?.email || 'unknown';
+    
+    console.log(`Creating microservice "${name}" by user: ${creator}`);
     
     // Crear directorio temporal para el microservicio
     const msDir = path.join(__dirname, 'temp', containerName);
@@ -212,7 +377,7 @@ CMD ["npm", "start"]
     fs.writeFileSync(path.join(msDir, 'Dockerfile'), dockerfile);
     
     // Construir imagen Docker
-    console.log(`📦 Construyendo imagen para ${containerName}...`);
+    console.log(`Construyendo imagen para ${containerName}...`);
     const stream = await docker.buildImage({
       context: msDir,
       src: ['Dockerfile', 'package.json', 'index.js']
@@ -229,7 +394,7 @@ CMD ["npm", "start"]
     });
     
     // Crear y ejecutar contenedor
-    console.log(`🚀 Iniciando contenedor ${containerName}...`);
+    console.log(`Iniciando contenedor ${containerName}...`);
     const container = await docker.createContainer({
       Image: containerName,
       name: containerName,
@@ -263,6 +428,7 @@ CMD ["npm", "start"]
       status: 'running',
       url: `http://localhost:4000/services/${serviceName}`, // URL completa para acceder
       createdAt: new Date().toISOString(),
+      createdBy: creator, // Store creator info
       endpoints: [], // El usuario define sus propios endpoints
       env: env || {},
       baseImage: baseImage || 'node:18-alpine',
@@ -287,8 +453,8 @@ CMD ["npm", "start"]
   }
 });
 
-// Actualizar un microservicio
-app.put('/api/microservices/:id', async (req, res) => {
+// Actualizar un microservicio (PROTECTED)
+app.put('/api/microservices/:id', roblePermissionMiddleware('create'), async (req, res) => {
   const { id } = req.params;
   const { name, description, env } = req.body;
   
@@ -306,6 +472,7 @@ app.put('/api/microservices/:id', async (req, res) => {
   if (env) microservices[index].env = { ...microservices[index].env, ...env };
   
   microservices[index].updatedAt = new Date().toISOString();
+  microservices[index].updatedBy = req.robleUser?.email || 'unknown';
   saveData();
   
   res.json({
@@ -315,8 +482,8 @@ app.put('/api/microservices/:id', async (req, res) => {
   });
 });
 
-// Eliminar un microservicio
-app.delete('/api/microservices/:id', async (req, res) => {
+// Eliminar un microservicio (PROTECTED - requires delete permissions)
+app.delete('/api/microservices/:id', roblePermissionMiddleware('delete'), async (req, res) => {
   const { id } = req.params;
   
   const index = microservices.findIndex(ms => ms.id === id);
@@ -330,6 +497,8 @@ app.delete('/api/microservices/:id', async (req, res) => {
   try {
     const ms = microservices[index];
     
+    console.log(`Deleting microservice "${ms.name}" by user: ${req.robleUser?.email || 'unknown'}`);
+    
     // Desregistrar proxy
     if (ms.serviceName) {
       unregisterProxy(ms.serviceName);
@@ -340,7 +509,7 @@ app.delete('/api/microservices/:id', async (req, res) => {
       const container = docker.getContainer(ms.containerId);
       await container.stop();
       await container.remove();
-      console.log(`🗑️ Contenedor ${ms.containerName} eliminado`);
+      console.log(`Contenedor ${ms.containerName} eliminado`);
     } catch (error) {
       console.warn('Error al eliminar contenedor:', error.message);
     }
@@ -349,7 +518,7 @@ app.delete('/api/microservices/:id', async (req, res) => {
     try {
       const image = docker.getImage(ms.containerName);
       await image.remove();
-      console.log(`🗑️ Imagen ${ms.containerName} eliminada`);
+      console.log(`Imagen ${ms.containerName} eliminada`);
     } catch (error) {
       console.warn('Error al eliminar imagen:', error.message);
     }
@@ -505,12 +674,9 @@ loadData();
 
 app.listen(PORT, () => {
   console.log(`
-╔════════════════════════════════════════════════════════╗
-║   🚀 GESTOR DE MICROSERVICIOS INICIADO                ║
-║                                                        ║
-║   📍 Puerto: ${PORT}                                      ║
-║   🌐 Dashboard: http://localhost:${PORT}                 ║
-║   📊 Microservicios registrados: ${microservices.length.toString().padEnd(18)}║
-╚════════════════════════════════════════════════════════╝
+GESTOR DE MICROSERVICIOS INICIADO
+Puerto: ${PORT}
+Dashboard: http://localhost:${PORT}
+Microservicios registrados: ${microservices.length}
   `);
 });

@@ -21,8 +21,15 @@ services:
       - ./gestor-microservicios/data:/app/data
       # Directorio temporal para construir microservicios
       - ./gestor-microservicios/temp:/app/temp
+      # Montar código fuente para desarrollo
+      - ./gestor-microservicios:/app
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=${NODE_ENV:-production}
+      - ROBLE_BASE_HOST=${ROBLE_BASE_HOST:-https://roble-api.openlab.uninorte.edu.co}
+      - ROBLE_CONTRACT=${ROBLE_CONTRACT}
+      - PORT=${PORT:-4000}
+    env_file:
+      - .env
     restart: unless-stopped
     networks:
       - microservices-network

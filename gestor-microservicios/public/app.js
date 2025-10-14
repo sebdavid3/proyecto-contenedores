@@ -1,13 +1,203 @@
 const API_URL = 'http://localhost:4000/api';
 let currentMicroservices = [];
+let authToken = null;
+let currentUser = null;
 
-// ==================== INICIALIZACIÓN ====================
+// ==================== AUTHENTICATION ====================
 
+// Check if user is already logged in on page load
 document.addEventListener('DOMContentLoaded', () => {
+  checkExistingAuth();
+});
+
+function checkExistingAuth() {
+  authToken = localStorage.getItem('roble_token');
+  
+  if (authToken) {
+    // Verify token is still valid
+    verifyToken(authToken);
+  } else {
+    showLoginScreen();
+  }
+}
+
+async function verifyToken(token) {
+  try {
+    const response = await fetch(`${API_URL}/auth/verify`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    
+    const data = await response.json();
+    
+    if (data.success && data.valid) {
+      currentUser = data.user.user || data.user;
+      authToken = token;
+      showDashboard();
+    } else {
+      localStorage.removeItem('roble_token');
+      showLoginScreen();
+    }
+  } catch (error) {
+    console.error('Token verification error:', error);
+    localStorage.removeItem('roble_token');
+    showLoginScreen();
+  }
+}
+
+function showLoginScreen() {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('main-dashboard').style.display = 'none';
+  setupLoginForm();
+}
+
+function showDashboard() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('main-dashboard').style.display = 'block';
+  
+  // Display user info
+  const userEmail = currentUser.email || 'Unknown';
+  const userRole = currentUser.role || 'user';
+  document.getElementById('user-email').textContent = userEmail;
+  document.getElementById('user-role').textContent = userRole;
+  document.getElementById('user-role').className = `status-badge status-${userRole === 'admin' ? 'running' : 'stopped'}`;
+  
+  // Display token
+  displayToken();
+  
+  // Initialize dashboard
   setupTabs();
   loadMicroservices();
   setupCreateForm();
-});
+}
+
+function displayToken() {
+  const tokenContainer = document.getElementById('user-token-container');
+  if (!tokenContainer || !authToken) return;
+  
+  const tokenPreview = authToken.substring(0, 20) + '...' + authToken.substring(authToken.length - 10);
+  
+  tokenContainer.innerHTML = `
+    <div style="margin-top: 10px; padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border: 1px solid var(--primary-color);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <strong style="color: var(--primary-color);">Tu Token ROBLE:</strong>
+        <button class="btn btn-sm" onclick="copyToken()" style="padding: 4px 12px;">
+          Copiar
+        </button>
+      </div>
+      <div style="background: var(--bg-secondary); padding: 8px; border-radius: 4px; font-family: monospace; font-size: 0.85rem; word-break: break-all; color: var(--text-light);" id="token-display">
+        ${tokenPreview}
+      </div>
+      <button class="btn btn-sm" onclick="toggleTokenVisibility()" style="margin-top: 8px; padding: 4px 12px; background: var(--bg-secondary);">
+        Mostrar completo
+      </button>
+    </div>
+  `;
+}
+
+function toggleTokenVisibility() {
+  const tokenDisplay = document.getElementById('token-display');
+  const button = event.target;
+  
+  if (tokenDisplay.textContent.includes('...')) {
+    tokenDisplay.textContent = authToken;
+    button.textContent = 'Ocultar';
+  } else {
+    const tokenPreview = authToken.substring(0, 20) + '...' + authToken.substring(authToken.length - 10);
+    tokenDisplay.textContent = tokenPreview;
+    button.textContent = 'Mostrar completo';
+  }
+}
+
+function copyToken() {
+  navigator.clipboard.writeText(authToken).then(() => {
+    const button = event.target;
+    const originalText = button.textContent;
+    button.textContent = 'Copiado!';
+    button.style.background = '#10b981';
+    
+    setTimeout(() => {
+      button.textContent = originalText;
+      button.style.background = '';
+    }, 2000);
+  }).catch(err => {
+    showNotification('Error al copiar el token', 'error');
+  });
+}
+
+function setupLoginForm() {
+  const form = document.getElementById('login-form');
+  
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const email = document.getElementById('login-email').value;
+    const password = document.getElementById('login-password').value;
+    
+    const statusDiv = document.getElementById('login-status');
+    statusDiv.style.display = 'block';
+    statusDiv.className = 'status-message status-loading';
+    statusDiv.textContent = 'Iniciando sesión...';
+    
+    try {
+      const response = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.token) {
+        authToken = data.token;
+        currentUser = data.user || {};
+        localStorage.setItem('roble_token', authToken);
+        
+        statusDiv.className = 'status-message status-success';
+        statusDiv.textContent = '¡Inicio de sesión exitoso! Redirigiendo...';
+        
+        setTimeout(() => {
+          showDashboard();
+        }, 1000);
+      } else {
+        throw new Error(data.error || 'Login failed');
+      }
+    } catch (error) {
+      statusDiv.className = 'status-message status-error';
+      statusDiv.textContent = `Error: ${error.message}`;
+    }
+  });
+}
+
+function logout() {
+  localStorage.removeItem('roble_token');
+  authToken = null;
+  currentUser = null;
+  showLoginScreen();
+}
+
+// Helper function to make authenticated requests
+async function authenticatedFetch(url, options = {}) {
+  if (!authToken) {
+    throw new Error('Not authenticated');
+  }
+  
+  const headers = {
+    ...options.headers,
+    'Authorization': `Bearer ${authToken}`
+  };
+  
+  const response = await fetch(url, { ...options, headers });
+  
+  // If token is invalid, logout
+  if (response.status === 401) {
+    logout();
+    throw new Error('Sesión expirada. Por favor, inicia sesión de nuevo.');
+  }
+  
+  return response;
+}
+
+// ==================== INICIALIZACIÓN ====================
 
 // ==================== TABS ====================
 
@@ -35,7 +225,7 @@ function setupTabs() {
 
 async function loadMicroservices() {
   const container = document.getElementById('microservices-list');
-  container.innerHTML = '<div class="loading">⏳ Cargando microservicios...</div>';
+  container.innerHTML = '<div class="loading">Cargando microservicios...</div>';
   
   try {
     const response = await fetch(`${API_URL}/microservices`);
@@ -48,7 +238,7 @@ async function loadMicroservices() {
       throw new Error(data.error || 'Error al cargar microservicios');
     }
   } catch (error) {
-    container.innerHTML = `<div class="empty-state"><h3>❌ Error</h3><p>${error.message}</p></div>`;
+    container.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${error.message}</p></div>`;
   }
 }
 
@@ -58,7 +248,7 @@ function renderMicroservices(microservices) {
   if (microservices.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
-        <h3>📦 No hay microservicios</h3>
+        <h3>No hay microservicios</h3>
         <p>Crea tu primer microservicio en la pestaña "Crear Nuevo"</p>
       </div>
     `;
@@ -81,22 +271,22 @@ function renderMicroservices(microservices) {
       
       <div class="microservice-actions">
         <button class="btn btn-primary btn-sm" onclick="viewDetails('${ms.id}')">
-          👁️ Ver Detalles
+          Ver Detalles
         </button>
         ${ms.status === 'running' ? `
           <button class="btn btn-warning btn-sm" onclick="controlMicroservice('${ms.id}', 'stop')">
-            ⏸️ Detener
+            Detener
           </button>
         ` : `
           <button class="btn btn-success btn-sm" onclick="controlMicroservice('${ms.id}', 'start')">
-            ▶️ Iniciar
+            Iniciar
           </button>
         `}
         <button class="btn btn-secondary btn-sm" onclick="controlMicroservice('${ms.id}', 'restart')">
-          🔄 Reiniciar
+          Reiniciar
         </button>
         <button class="btn btn-danger btn-sm" onclick="deleteMicroservice('${ms.id}')">
-          🗑️ Eliminar
+          Eliminar
         </button>
       </div>
     </div>
@@ -118,37 +308,37 @@ async function controlMicroservice(id, action) {
     const data = await response.json();
     
     if (data.success) {
-      showNotification(`✅ Microservicio ${action} exitosamente`, 'success');
+      showNotification(`Microservicio ${action} exitosamente`, 'success');
       loadMicroservices();
     } else {
       throw new Error(data.error);
     }
   } catch (error) {
-    showNotification(`❌ Error: ${error.message}`, 'error');
+    showNotification(`Error: ${error.message}`, 'error');
   }
 }
 
 async function deleteMicroservice(id) {
-  if (!confirm('⚠️ ¿Estás seguro de eliminar este microservicio? Esta acción no se puede deshacer.')) {
+  if (!confirm('¿Estás seguro de eliminar este microservicio? Esta acción no se puede deshacer.')) {
     return;
   }
   
   try {
-    const response = await fetch(`${API_URL}/microservices/${id}`, {
+    const response = await authenticatedFetch(`${API_URL}/microservices/${id}`, {
       method: 'DELETE'
     });
     
     const data = await response.json();
     
     if (data.success) {
-      showNotification('✅ Microservicio eliminado exitosamente', 'success');
+      showNotification('Microservicio eliminado exitosamente', 'success');
       loadMicroservices();
       closeModal();
     } else {
       throw new Error(data.error);
     }
   } catch (error) {
-    showNotification(`❌ Error: ${error.message}`, 'error');
+    showNotification(`Error: ${error.message}`, 'error');
   }
 }
 
@@ -158,7 +348,7 @@ async function viewDetails(id) {
   
   const modalBody = document.getElementById('modal-body');
   modalBody.innerHTML = `
-    <h2>📦 ${ms.name}</h2>
+    <h2>${ms.name}</h2>
     <p><strong>Estado:</strong> <span class="status-badge status-${ms.status}">${ms.status}</span></p>
     
     <div style="margin: 20px 0;">
@@ -175,19 +365,19 @@ async function viewDetails(id) {
     
     ${ms.endpoints && ms.endpoints.length > 0 ? `
       <div style="margin: 20px 0;">
-        <h3>🔗 Endpoints Disponibles</h3>
+        <h3>Endpoints Disponibles</h3>
         <div class="endpoints-list">
           ${ms.endpoints.map(ep => `
             <div class="endpoint-item">
               <div>
                 <span class="endpoint-method method-${ep.method}">${ep.method}</span>
                 <span class="endpoint-path">${ep.path}</span>
-                ${ep.requiresAuth ? '<span style="color: #f59e0b; margin-left: 8px;">🔒 Requiere Auth</span>' : ''}
+                ${ep.requiresAuth ? '<span style="color: #f59e0b; margin-left: 8px;">Requiere Auth</span>' : ''}
               </div>
               ${ep.description ? `<div class="endpoint-description">${ep.description}</div>` : ''}
               <div style="margin-top: 8px;">
                 <button class="btn btn-primary btn-sm" onclick="testEndpoint('${ms.id}', '${ep.path}', '${ep.method}', ${ep.requiresAuth})">
-                  🧪 Probar
+                  Probar
                 </button>
                 <code style="margin-left: 10px; font-size: 0.8rem;">${ep.url}</code>
               </div>
@@ -199,7 +389,7 @@ async function viewDetails(id) {
     
     ${Object.keys(ms.env || {}).length > 0 ? `
       <div style="margin: 20px 0;">
-        <h3>⚙️ Variables de Entorno</h3>
+        <h3>Variables de Entorno</h3>
         <div class="microservice-info">
           ${Object.entries(ms.env).map(([key, value]) => `
             <div><code>${key}</code> = ${value}</div>
@@ -227,7 +417,7 @@ function setupCreateForm() {
     const statusDiv = document.getElementById('create-status');
     statusDiv.style.display = 'block';
     statusDiv.className = 'status-message status-loading';
-    statusDiv.textContent = '⏳ Creando y desplegando microservicio...';
+    statusDiv.textContent = 'Creando y desplegando microservicio...';
     
     // Obtener dependencias como array
     const depsText = document.getElementById('ms-dependencies').value;
@@ -245,7 +435,7 @@ function setupCreateForm() {
     };
     
     try {
-      const response = await fetch(`${API_URL}/microservices`, {
+      const response = await authenticatedFetch(`${API_URL}/microservices`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
@@ -256,7 +446,7 @@ function setupCreateForm() {
       if (data.success) {
         statusDiv.className = 'status-message status-success';
         statusDiv.innerHTML = `
-          ✅ <strong>¡Microservicio creado exitosamente!</strong><br>
+          ¡Microservicio creado exitosamente!<br>
           Nombre: ${data.microservice.name}<br>
           Service: ${data.microservice.serviceName}<br>
           <strong>URL: <a href="${data.microservice.url}" target="_blank" style="color: white; text-decoration: underline;">${data.microservice.url}</a></strong><br>
@@ -272,7 +462,7 @@ function setupCreateForm() {
       }
     } catch (error) {
       statusDiv.className = 'status-message status-error';
-      statusDiv.textContent = `❌ Error: ${error.message}`;
+      statusDiv.textContent = `Error: ${error.message}`;
     }
   });
 }
@@ -342,7 +532,7 @@ function testEndpoint(msId, path, method, requiresAuth) {
         <textarea id="test-body" rows="4" placeholder='{"campo": "valor"}'></textarea>
       </div>
       
-      <button type="submit" class="btn btn-success">🚀 Enviar Petición</button>
+      <button type="submit" class="btn btn-success">Enviar Petición</button>
     </form>
     
     <div id="test-result" style="display: none;"></div>
@@ -363,7 +553,7 @@ function testEndpoint(msId, path, method, requiresAuth) {
     
     const resultDiv = document.getElementById('test-result');
     resultDiv.style.display = 'block';
-    resultDiv.innerHTML = '<div class="loading">⏳ Enviando petición...</div>';
+    resultDiv.innerHTML = '<div class="loading">Enviando petición...</div>';
     
     try {
       const response = await fetch(`${API_URL}/microservices/${msId}/test`, {
@@ -380,7 +570,7 @@ function testEndpoint(msId, path, method, requiresAuth) {
       const data = await response.json();
       
       resultDiv.innerHTML = `
-        <h3>📊 Respuesta</h3>
+        <h3>Respuesta</h3>
         <div class="test-response">
           <div><strong>Status:</strong> ${data.status}</div>
           <div style="margin-top: 10px;"><strong>Data:</strong></div>
@@ -390,7 +580,7 @@ function testEndpoint(msId, path, method, requiresAuth) {
     } catch (error) {
       resultDiv.innerHTML = `
         <div class="status-message status-error">
-          ❌ Error: ${error.message}
+          Error: ${error.message}
         </div>
       `;
     }
