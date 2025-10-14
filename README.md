@@ -2,7 +2,33 @@
 
 Sistema de gestion dinamica de microservicios con interfaz web y API Gateway integrado.
 
+Este proyecto permite crear y gestionar microservicios de forma dinamica utilizando Docker, con una interfaz web y un API Gateway integrado para facilitar la comunicacion entre servicios.
+
 **Video de prueba:** [https://youtu.be/-asvUvA08g4](https://youtu.be/-asvUvA08g4)
+
+## Arquitectura
+
+Arquitectura de microservicios con un gestor central que actua como API Gateway y dashboard web. Los microservicios se crean dinamicamente como contenedores Docker en una red compartida, permitiendo aislamiento y escalabilidad. El gestor maneja autenticacion ROBLE, proxy de rutas y orquestacion de contenedores.
+
+## Endpoints
+
+- **Autenticacion:**
+  - `/api/auth/login` (POST) - Retorna `{ success: true, message: "Login successful", token: "...", user: {...} }`
+  - `/api/auth/verify` (GET) - Retorna `{ success: true, valid: true, user: {...} }`
+  - `/api/auth/me` (GET) - Retorna `{ success: true, user: {...} }`
+- **Consulta ROBLE:** `/api/roble/query` (POST) - Retorna `{ success: true, data: [...], tableName }`
+- **Gestion de microservicios:**
+  - `/api/microservices` (GET) - Retorna `{ success: true, microservices: [...] }`
+  - `/api/microservices/:id` (GET) - Retorna `{ success: true, microservice: {...} }`
+  - `/api/microservices` (POST) - Retorna `{ success: true, message: "Microservicio creado...", microservice: {...} }`
+  - `/api/microservices/:id` (PUT/DELETE) - Retorna `{ success: true, message: "...", microservice: {...} }`
+  - `/api/microservices/:id/:action` - Retorna `{ success: true, message: "Microservicio ...", microservice: {...} }`
+- **Proxies a microservicios:** `/services/{nombre-servicio}/...` - Retorna respuesta del microservicio correspondiente
+- **Health check:** `/health` - Retorna `{ status: "OK", service: "Gestor de Microservicios", microservicesCount: N }`
+
+## Despliegue
+
+Despliegue usando Docker Compose. El gestor se inicia primero, luego los microservicios se crean via interfaz web y se despliegan automaticamente como contenedores.
 
 ## Instalacion Rapida
 
@@ -24,6 +50,7 @@ docker compose up -d
 Consulta tablas de la base de datos ROBLE.
 
 **Codigo:**
+
 ```javascript
 const express = require('express');
 const axios = require('axios');
@@ -95,6 +122,7 @@ app.listen(PORT, () => {
 **Dependencias:** `express`, `axios`
 
 **Ejemplo de uso:**
+
 ```bash
 POST http://localhost:4000/services/roble-query/api/query
 Content-Type: application/json
@@ -111,6 +139,7 @@ Content-Type: application/json
 Microservicio que suma dos numeros (GET y POST).
 
 **Codigo:**
+
 ```javascript
 const express = require('express');
 const app = express();
@@ -187,6 +216,7 @@ app.listen(PORT, () => {
 **Dependencias:** `express`
 
 **Ejemplos de uso:**
+
 ```bash
 # GET
 http://localhost:4000/services/suma/api/suma?num1=10&num2=20
@@ -206,6 +236,7 @@ Content-Type: application/json
 Microservicio simple que responde con mensajes de bienvenida.
 
 **Codigo:**
+
 ```javascript
 const express = require('express');
 const app = express();
@@ -247,6 +278,7 @@ app.listen(PORT, () => {
 **Dependencias:** `express`
 
 **Ejemplos de uso:**
+
 ```bash
 # Saludo basico
 http://localhost:4000/services/hola-mundo/api/hello
