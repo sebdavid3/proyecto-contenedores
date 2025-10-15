@@ -1,27 +1,13 @@
-version: '3.8'
-
 services:
-  # ==================== GESTOR DE MICROSERVICIOS ====================
-  # Dashboard web para administrar microservicios dinámicamente
-  # 
-  # IMPORTANTE: Los microservicios NO están aquí hardcodeados
-  # Se crean dinámicamente desde el dashboard web
-  # 
-  # Acceso: http://localhost:4000
-  
   gestor:
     build: ./gestor-microservicios
     ports:
       - "4000:4000"
     container_name: gestor-microservicios
     volumes:
-      # Socket de Docker para controlar contenedores desde dentro
       - /var/run/docker.sock:/var/run/docker.sock
-      # Persistencia de datos
       - ./gestor-microservicios/data:/app/data
-      # Directorio temporal para construir microservicios
       - ./gestor-microservicios/temp:/app/temp
-      # Montar código fuente para desarrollo
       - ./gestor-microservicios:/app
     environment:
       - NODE_ENV=${NODE_ENV:-production}

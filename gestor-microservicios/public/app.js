@@ -3,9 +3,6 @@ let currentMicroservices = [];
 let authToken = null;
 let currentUser = null;
 
-// ==================== AUTHENTICATION ====================
-
-// Check if user is already logged in on page load
 document.addEventListener('DOMContentLoaded', () => {
   checkExistingAuth();
 });
@@ -54,17 +51,13 @@ function showDashboard() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('main-dashboard').style.display = 'block';
   
-  // Display user info
   const userEmail = currentUser.email || 'Unknown';
   const userRole = currentUser.role || 'user';
   document.getElementById('user-email').textContent = userEmail;
   document.getElementById('user-role').textContent = userRole;
   document.getElementById('user-role').className = `status-badge status-${userRole === 'admin' ? 'running' : 'stopped'}`;
   
-  // Display token
   displayToken();
-  
-  // Initialize dashboard
   setupTabs();
   loadMicroservices();
   setupCreateForm();
@@ -175,7 +168,6 @@ function logout() {
   showLoginScreen();
 }
 
-// Helper function to make authenticated requests
 async function authenticatedFetch(url, options = {}) {
   if (!authToken) {
     throw new Error('Not authenticated');
@@ -188,7 +180,6 @@ async function authenticatedFetch(url, options = {}) {
   
   const response = await fetch(url, { ...options, headers });
   
-  // If token is invalid, logout
   if (response.status === 401) {
     logout();
     throw new Error('Sesión expirada. Por favor, inicia sesión de nuevo.');
@@ -197,10 +188,6 @@ async function authenticatedFetch(url, options = {}) {
   return response;
 }
 
-// ==================== INICIALIZACIÓN ====================
-
-// ==================== TABS ====================
-
 function setupTabs() {
   const tabBtns = document.querySelectorAll('.tab-btn');
   
@@ -208,11 +195,9 @@ function setupTabs() {
     btn.addEventListener('click', () => {
       const tabName = btn.dataset.tab;
       
-      // Actualizar botones
       tabBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       
-      // Actualizar contenido
       document.querySelectorAll('.tab-content').forEach(content => {
         content.classList.remove('active');
       });
@@ -220,8 +205,6 @@ function setupTabs() {
     });
   });
 }
-
-// ==================== MICROSERVICIOS ====================
 
 async function loadMicroservices() {
   const container = document.getElementById('microservices-list');
@@ -406,8 +389,6 @@ function closeModal() {
   document.getElementById('modal').classList.remove('active');
 }
 
-// ==================== CREAR MICROSERVICIO ====================
-
 function setupCreateForm() {
   const form = document.getElementById('create-form');
   
@@ -419,7 +400,6 @@ function setupCreateForm() {
     statusDiv.className = 'status-message status-loading';
     statusDiv.textContent = 'Creando y desplegando microservicio...';
     
-    // Obtener dependencias como array
     const depsText = document.getElementById('ms-dependencies').value;
     const dependencies = depsText.split('\n')
       .map(line => line.trim())
@@ -492,8 +472,6 @@ function addEnvVar() {
   `;
   container.appendChild(row);
 }
-
-// ==================== PROBAR ENDPOINT ====================
 
 function testEndpoint(msId, path, method, requiresAuth) {
   const ms = currentMicroservices.find(m => m.id === msId);
@@ -593,8 +571,6 @@ function closeTestModal() {
   document.getElementById('test-modal').classList.remove('active');
 }
 
-// ==================== UTILIDADES ====================
-
 function showNotification(message, type) {
   const notification = document.createElement('div');
   notification.className = `status-message status-${type}`;
@@ -614,7 +590,6 @@ function showNotification(message, type) {
   }, 3000);
 }
 
-// Cerrar modales al hacer clic fuera
 window.onclick = function(event) {
   const modal = document.getElementById('modal');
   const testModal = document.getElementById('test-modal');
