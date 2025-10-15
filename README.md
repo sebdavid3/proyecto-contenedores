@@ -36,6 +36,15 @@ Despliegue usando Docker Compose. El gestor se inicia primero, luego los microse
 # Crear red Docker
 docker network create microservices-network
 
+# Ir a la carpeta del gestor de microservicios
+cd gestor-microservicios
+
+# Instalar dependencias
+npm install
+
+# Volver al directorio principal
+cd ..
+
 # Iniciar el gestor
 docker compose up -d
 
