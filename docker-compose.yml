@@ -8,7 +8,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./gestor-microservicios/data:/app/data
       - ./gestor-microservicios/temp:/app/temp
-      - ./gestor-microservicios:/app
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - ROBLE_BASE_HOST=${ROBLE_BASE_HOST:-https://roble-api.openlab.uninorte.edu.co}
@@ -22,4 +21,5 @@ services:
 
 networks:
   microservices-network:
-    external: true
+    name: microservices-network
+    driver: bridge
