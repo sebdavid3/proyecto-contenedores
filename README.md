@@ -35,9 +35,6 @@ Despliegue usando Docker Compose. El gestor se inicia primero, luego los microse
 ## Instalacion Rapida
 
 ```bash
-# Asegúrate de que la red Docker 'microservices-network' exista (si no, créala)
-docker network create microservices-network
-
 # Iniciar el gestor
 docker compose up -d
 
