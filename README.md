@@ -10,6 +10,8 @@ Este proyecto permite crear y gestionar microservicios de forma dinamica utiliza
 
 Arquitectura de microservicios con un gestor central que actua como API Gateway y dashboard web. Los microservicios se crean dinamicamente como contenedores Docker en una red compartida, permitiendo aislamiento y escalabilidad. El gestor maneja autenticacion ROBLE, proxy de rutas y orquestacion de contenedores.
 
+**Nota:** Todos los datos y archivos generados dentro de los contenedores son efímeros y se eliminan al detener o eliminar los contenedores. No se persisten en el host.
+
 ## Endpoints
 
 - **Autenticacion:**
@@ -33,17 +35,8 @@ Despliegue usando Docker Compose. El gestor se inicia primero, luego los microse
 ## Instalacion Rapida
 
 ```bash
-# Crear red Docker
+# Asegúrate de que la red Docker 'microservices-network' exista (si no, créala)
 docker network create microservices-network
-
-# Ir a la carpeta del gestor de microservicios
-cd gestor-microservicios
-
-# Instalar dependencias
-npm install
-
-# Volver al directorio principal
-cd ..
 
 # Iniciar el gestor
 docker compose up -d
