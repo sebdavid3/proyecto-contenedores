@@ -6,8 +6,6 @@ services:
     container_name: gestor-microservicios
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./gestor-microservicios/data:/app/data
-      - ./gestor-microservicios/temp:/app/temp
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - ROBLE_BASE_HOST=${ROBLE_BASE_HOST:-https://roble-api.openlab.uninorte.edu.co}
@@ -21,5 +19,4 @@ services:
 
 networks:
   microservices-network:
-    name: microservices-network
-    driver: bridge
+    external: true
